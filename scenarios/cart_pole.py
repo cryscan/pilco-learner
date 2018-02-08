@@ -1,26 +1,26 @@
 import numpy as np
-from numpy import sin, cos
+from numpy import sin, cos, zeros, zeros_like
 from scipy.integrate import odeint
+from numpy.random import multivariate_normal as gaussian
 import matplotlib.pyplot as plt
 from matplotlib import animation
 
 # z = [x1, v1, omiga, theta]
-def dynamics(z, t, f, g, l, m1, m2, b, dt):
-	u = f[int(t/dt)]
-	dzdt = np.zeros_like(z)
-	deno = 4*(m1 + m2) - 3*m1*cos(z[3])**2
+def dynamics(z, t, u):
+	dzdt = zeros_like(z)
 
 	dzdt[0] = z[1]
 	dzdt[1] = (2*m1*l*(z[2]**2)*sin(z[3]) + 3*m1*g*sin(z[3])*cos(z[3])
-			+ 4*u - 4*b*z[1]) / deno
+			+ 4*u - 4*b*z[1]) / (4*(m1 + m2) - 3*m1*cos(z[3])**2)
 	dzdt[2] = (-3*m1*l*(z[2]**2)*sin(z[3])*cos(z[3]) - 6*(m1 + m2)*g*sin(z[3])
-			- 6*(u - b*z[1])*cos(z[3])) / (l*deno)
+			- 6*(u - b*z[1])*cos(z[3])) / (4*l*(m1 + m2) - 3*l*m1*cos(z[3])**2)
 	dzdt[3] = z[2]
 
 	return dzdt
 
 dt = 0.05
-t = np.arange(.0, 5, dt)
+T = 5
+H = int(T/dt)			# total iterations
 
 g = 9.82	# [m/s^2]
 l = 0.6		# [m]		length of pendulum
@@ -30,15 +30,21 @@ b = 0.1		# [N/m/s]	coefficient of friction
 
 maxu = 10	# [N]	maximum of force applied
 
-# apply force
-f = np.random.uniform(-maxu, maxu, t.shape)
+# apply random actions
+def policy(z):
+	return np.random.uniform(-maxu, maxu)
 
 # initial state
 mu0 = np.array([0, 0, 0, 0])
 S0 = np.diag([0.01, 0.01, 0.01, 0.01])
-z0 = np.random.multivariate_normal(mu0, S0)
 
-y = odeint(dynamics, z0, t, args=(f, g, l, m1, m2, b, dt))
+# rollout
+y = np.atleast_2d(gaussian(mu0, S0))
+for i in range(1, H):
+	start= y[i-1]
+	u = policy(start)
+	next = odeint(dynamics, start, [0, dt], args=(u,))
+	y = np.vstack((y, next[-1, :]))
 
 # render rollout animation
 x1 = y[:, 0]
