@@ -3,6 +3,7 @@ from numpy import zeros, hstack, size, diag
 from numpy.random import rand, randn
 from numpy.random import multivariate_normal as gaussian
 from scipy.integrate import odeint
+
 import util
 
 def rollout(start, policy, H, plant, cost, return_cost=False):
@@ -45,6 +46,7 @@ def rollout(start, policy, H, plant, cost, return_cost=False):
 	u = zeros((H, nU))
 	y = zeros((H, nX))
 	L = zeros(H)
+	latent = zeros((H + 1, size(state) + nU))
 
 	for i in range(H):
 		s = x[i, dyno]
@@ -55,8 +57,9 @@ def rollout(start, policy, H, plant, cost, return_cost=False):
 		f = policy.get('fcn')
 		if f is None:	# perform random actions
 			u[i, :] = policy['max_u']*(2*rand(nU) - 1)
-		else:			# or apply policy
+		else:	# or apply policy
 			u[i, :] = f(policy, s[poli], zeros(len(poli)))
+		latent[i, :] = hstack((state, u[i, :]))
 		
 		# solve dynamics
 		dynamics = plant['dynamics']
@@ -65,11 +68,12 @@ def rollout(start, policy, H, plant, cost, return_cost=False):
 		state = next[-1, :]
 		x[i + 1, odei] = gaussian(state[odei], plant['noise'])
 
-		if return_cost == True:
+		if return_cost:
 			L[i] = cost['fcn'](cost, state[dyno], zeros(len(dyno)))
 		
 	y = x[1:H + 1, 0:nX]
 	x = hstack((x[0:H, :], u[0:H, :]))
+	latent[H, 0:nX] = state
 
-	if return_cost == True: return x, y, L
-	else: return x, y
+	if return_cost: return x, y, L, latent
+	return x, y, latent

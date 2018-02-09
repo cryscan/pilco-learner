@@ -1,9 +1,11 @@
 import numpy as np
-from numpy import sin, cos
+from numpy import sin, cos, log
 from numpy import ones, zeros, zeros_like, diag
+from numpy.random import randn
 from numpy.random import multivariate_normal as gaussian
 import matplotlib.pyplot as plt
 from matplotlib import animation
+
 from base import rollout
 from util import trig
 
@@ -35,13 +37,15 @@ difi = [0, 1, 2, 3]
 
 dt = 0.05
 T = 5
-H = int(T/dt)			# total iterations
-mu0 = [0, 0, 0, 0]
+H = int(T/dt)
+mu0 = np.array([0, 0, 0, 0])
 S0 = diag([0.01, 0.01, 0.01, 0.01])
+N = 15
+nc = 10
 
 plant = {
 	"dynamics":	dynamics,
-	"noise":	diag(zeros(4)),
+	"noise":	diag(ones(4)*1e-4),
 	"dt":		dt,
 	"odei":		odei,
 	"angi":		angi,
@@ -58,14 +62,21 @@ m = np.hstack((mu0, m))
 c = np.dot(S0, c)
 s = np.bmat([[S0, c], [c.T, s]]).A
 
-(x, y) = rollout(gaussian(mu0, S0), policy, H, plant, {})
+p = {
+	"inputs":	gaussian(m[poli], s[np.ix_(poli, poli)], nc),
+	"targets":	.1*randn(nc, len(policy['max_u'])),
+	"hyp":		log([1, 1, 1, 0.7, 0.7, 1, 0.01])
+}
+policy['p'] = p
+
+x, y, latent = rollout(gaussian(mu0, S0), policy, H, plant, {})
 
 # render rollout animation
 l = 0.6
-x1 = y[:, 0]
+x1 = latent[:, 0]
 y1 = np.zeros_like(x1)
-x2 = x1 + l*sin(y[:, 3])
-y2 = -l*cos(y[:, 3])
+x2 = x1 + l*sin(latent[:, 3])
+y2 = -l*cos(latent[:, 3])
 
 fig = plt.figure()
 ax = fig.add_subplot(111, autoscale_on=False, xlim=(-2, 2), ylim=(-2, 2))
