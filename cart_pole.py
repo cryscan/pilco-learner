@@ -1,12 +1,20 @@
 import numpy as np
-from numpy import sin, cos, zeros, zeros_like
-from scipy.integrate import odeint
+from numpy import sin, cos
+from numpy import ones, zeros, zeros_like, diag
 from numpy.random import multivariate_normal as gaussian
 import matplotlib.pyplot as plt
 from matplotlib import animation
+from base import rollout
+from util import trig
 
 # z = [x1, v1, omiga, theta]
 def dynamics(z, t, u):
+	g = 9.82	# [m/s^2]
+	l = 0.6		# [m]		length of pendulum
+	m1 = 0.5	# [kg]		mass of pedulum
+	m2 = 0.5	# [kg]		mass of cart
+	b = 0.1		# [N/m/s]	coefficient of friction
+
 	dzdt = zeros_like(z)
 
 	dzdt[0] = z[1]
@@ -18,35 +26,42 @@ def dynamics(z, t, u):
 
 	return dzdt
 
+odei = [0, 1, 2, 3]
+dyno = [0, 1, 2, 3]
+angi = [3]
+dyni = [0, 1, 2, 4, 5]
+poli = [0, 1, 2, 4, 5]
+difi = [0, 1, 2, 3]
+
 dt = 0.05
 T = 5
 H = int(T/dt)			# total iterations
+mu0 = [0, 0, 0, 0]
+S0 = diag([0.01, 0.01, 0.01, 0.01])
 
-g = 9.82	# [m/s^2]
-l = 0.6		# [m]		length of pendulum
-m1 = 0.5	# [kg]		mass of pedulum
-m2 = 0.5	# [kg]		mass of cart
-b = 0.1		# [N/m/s]	coefficient of friction
+plant = {
+	"dynamics":	dynamics,
+	"noise":	diag(zeros(4)),
+	"dt":		dt,
+	"odei":		odei,
+	"angi":		angi,
+	"poli":		poli,
+	"dyno":		dyno,
+	"dyni":		dyni,
+	"difi":		difi
+}
 
-maxu = 10	# [N]	maximum of force applied
+policy = {"max_u": [10]}
 
-# apply random actions
-def policy(z):
-	return np.random.uniform(-maxu, maxu)
+m, s, c = trig(mu0, S0, angi)
+m = np.hstack((mu0, m))
+c = np.dot(S0, c)
+s = np.bmat([[S0, c], [c.T, s]]).A
 
-# initial state
-mu0 = np.array([0, 0, 0, 0])
-S0 = np.diag([0.01, 0.01, 0.01, 0.01])
-
-# rollout
-y = np.atleast_2d(gaussian(mu0, S0))
-for i in range(1, H):
-	start= y[i-1]
-	u = policy(start)
-	next = odeint(dynamics, start, [0, dt], args=(u,))
-	y = np.vstack((y, next[-1, :]))
+(x, y) = rollout(gaussian(mu0, S0), policy, H, plant, {})
 
 # render rollout animation
+l = 0.6
 x1 = y[:, 0]
 y1 = np.zeros_like(x1)
 x2 = x1 + l*sin(y[:, 3])
