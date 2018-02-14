@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib import animation
 
 from base import rollout
-from util import trig
+from util import gaussian_trig
 
 # z = [x1, v1, omiga, theta]
 def dynamics(z, t, u):
@@ -57,8 +57,8 @@ plant = {
 
 policy = {"max_u": [10]}
 
-m, s, c = trig(mu0, S0, angi)
-m = np.hstack((mu0, m))
+m, s, c = gaussian_trig(mu0, S0, angi)
+m = np.hstack([mu0, m])
 c = np.dot(S0, c)
 s = np.bmat([[S0, c], [c.T, s]]).A
 

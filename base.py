@@ -4,7 +4,7 @@ from numpy.random import rand, randn
 from numpy.random import multivariate_normal as gaussian
 from scipy.integrate import odeint
 
-import util
+from util import gaussian_trig
 
 def rollout(start, policy, H, plant, cost, return_cost=False):
 	"""
@@ -40,18 +40,18 @@ def rollout(start, policy, H, plant, cost, return_cost=False):
 
 	# initializations
 	state = start
-	x = zeros((H + 1, nX + 2*nA))
+	x = zeros([H + 1, nX + 2*nA])
 	x[0, odei] = gaussian(start, plant['noise'])
 	
-	u = zeros((H, nU))
-	y = zeros((H, nX))
+	u = zeros([H, nU])
+	y = zeros([H, nX])
 	L = zeros(H)
-	latent = zeros((H + 1, size(state) + nU))
+	latent = zeros([H + 1, size(state) + nU])
 
 	for i in range(H):
 		s = x[i, dyno]
-		a, _, _ = util.trig(s, diag(zeros(size(s))), angi)
-		s = hstack((s, a))
+		a, _, _ = gaussian_trig(s, diag(zeros(size(s))), angi)
+		s = hstack([s, a])
 		x[i, -2*nA:] = s[-2*nA:]
 
 		f = policy.get('fcn')
@@ -59,7 +59,7 @@ def rollout(start, policy, H, plant, cost, return_cost=False):
 			u[i, :] = policy['max_u']*(2*rand(nU) - 1)
 		else:	# or apply policy
 			u[i, :] = f(policy, s[poli], zeros(len(poli)))
-		latent[i, :] = hstack((state, u[i, :]))
+		latent[i, :] = hstack([state, u[i, :]])
 		
 		# solve dynamics
 		dynamics = plant['dynamics']
@@ -72,7 +72,7 @@ def rollout(start, policy, H, plant, cost, return_cost=False):
 			L[i] = cost['fcn'](cost, state[dyno], zeros(len(dyno)))
 		
 	y = x[1:H + 1, 0:nX]
-	x = hstack((x[0:H, :], u[0:H, :]))
+	x = hstack([x[0:H, :], u[0:H, :]])
 	latent[H, 0:nX] = state
 
 	if return_cost: return x, y, L, latent
