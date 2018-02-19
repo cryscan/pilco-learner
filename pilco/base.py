@@ -1,6 +1,7 @@
 import autograd.numpy as np
 from autograd.numpy.random import rand, multivariate_normal
 from scipy.integrate import odeint
+
 from pilco.util import gaussian_trig
 
 
@@ -47,8 +48,8 @@ def rollout(start, policy, H, plant, cost):
         if hasattr(cost, "fcn"):
             L[i] = cost.fcn(state[dyno], 0 * np.eye(len(dyno)))
 
-    y = x[1:H + 1, 0:nX]
-    x = np.hstack([x[0:H, :], u[0:H, :]])
-    latent[H, 0:nX] = state
+    y = x[1:H + 1, :nX]
+    x = np.hstack([x[:H, :], u[:H, :]])
+    latent[H, :nX] = state
 
     return x, y, L, latent

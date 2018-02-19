@@ -1,15 +1,14 @@
 import math
+
 import autograd.numpy as np
+import matplotlib.pyplot as plt
 from autograd.numpy import sin, cos, log
 from autograd.numpy.random import randn, multivariate_normal
-import matplotlib.pyplot as plt
 from matplotlib import animation
+
 from pilco.base import rollout
 from pilco.util import gaussian_trig
-
-
-class dummy:
-    pass
+from pilco import empty
 
 
 def dynamics(z, t, u):
@@ -48,7 +47,7 @@ S0 = np.square(np.diag([0.1, 0.1, 0.1, 0.1]))
 N = 15
 nc = 10
 
-plant = dummy()
+plant = empty()
 plant.dynamics = dynamics
 plant.noise = np.square(np.diag([1e-2, 1e-2, 1e-2, 1e-2]))
 plant.dt = dt
@@ -59,7 +58,7 @@ plant.dyno = dyno
 plant.dyni = dyni
 plant.difi = difi
 
-policy = dummy()
+policy = empty()
 policy.max_u = [10]
 
 m, s, c = gaussian_trig(mu0, S0, angi)
@@ -67,13 +66,13 @@ m = np.hstack([mu0, m])
 c = np.dot(S0, c)
 s = np.vstack([np.hstack([S0, c]), np.hstack([c.T, s])])
 
-p = dummy()
+p = empty()
 p.inputs = multivariate_normal(m[poli], s[np.ix_(poli, poli)], nc)
 p.targets = 0.1 * randn(nc, len(policy.max_u))
 p.hyp = log([1, 1, 1, 0.7, 0.7, 1, 0.01])
 policy.p = p
 
-cost = dummy()
+cost = empty()
 
 x, y, _, latent = rollout(multivariate_normal(mu0, S0), policy, H, plant, cost)
 

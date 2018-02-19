@@ -1,6 +1,12 @@
 import autograd.numpy as np
 from autograd.numpy import sin, cos, exp
 
+__all__ = ['empty']
+
+
+class empty(dict):
+    pass
+
 
 def gaussian_trig(m, v, i):
     d = len(m)
