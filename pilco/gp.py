@@ -8,15 +8,10 @@ from pilco import empty
 
 
 def maha(a, b, Q):
-    _, E, n, D = a.shape
-    E, _, n, D = b.shape
-    E, E, D, D = Q.shape
-    a = np.broadcast_to(a, [E, E, n, D])
-    b = np.broadcast_to(b, [E, E, n, D])
-
-    aQ = a @ Q
-    K = np.expand_dims(np.sum(aQ * a, -1), -2) + np.expand_dims(
-        np.sum(b @ Q * b, -1), -1) - 2 * aQ @ np.transpose(b, [0, 1, 3, 2])
+    aQ = np.einsum('i...kl,ijlm->ijkm', a, Q)
+    bQ = np.einsum('...ikl,ijlm->ijkm', b, Q)
+    K = np.expand_dims(np.sum(aQ * a, -1), -1) + np.expand_dims(
+        np.sum(bQ * b, -1), -2) - 2 * aQ @ np.einsum('...ji', b)
     return K
 
 
@@ -89,9 +84,6 @@ class kernel_noise(kernel):
 class gpmodel:
     """
     Before training:
-    kernel
-    crub
-
     hyp      [E, D + 2]
     inputs   [n, D]
     targets  [n, E]
@@ -180,7 +172,10 @@ class gpmodel:
         print("Train hyperparameters of full GP...")
         try:
             self.result = minimize(
-                value_and_grad(self._hyp_crub), self.hyp, jac=True)
+                value_and_grad(self._hyp_crub),
+                self.hyp,
+                jac=True,
+                method='BFGS')
         except Exception:
             self.result = minimize(
                 value_and_grad(self._hyp_crub),
@@ -188,7 +183,6 @@ class gpmodel:
                 jac=True,
                 method='CG')
 
-        print(self.result)
         self.hyp = self.result.get('x').reshape(E, -1)
         self.K = self.kernel(self.hyp, x)
         self.iK = np.stack([solve(self.K[i], np.eye(n)) for i in range(E)])
@@ -246,15 +240,16 @@ class gpmodel:
         siL = np.expand_dims(iL, 0) + np.expand_dims(iL, 1)  # [E, E, D, D]
         R = s @ siL + np.eye(D)  # [E, E, D, D]
         t = 1 / sqrt(det(R))  # [E, E]
-        iRs = np.stack([
-            solve(R.reshape(E * E, D, D)[i], s) for i in range(E * E)
-        ]).reshape(E, E, D, D)
+        iRs = np.stack(
+            [solve(R.reshape(-1, D, D)[i], s) for i in range(E * E)])
+        iRs = iRs.reshape(E, E, D, D)
         # [E, E, n, n]
-        L = exp(k.reshape(E, 1, n, 1) + k.reshape(1, E, 1, n)) + maha(
-            np.expand_dims(ii, 0), -np.expand_dims(ii, 1), iRs / 2)
+        Q = exp(
+            k.reshape(E, 1, n, 1) + k.reshape(1, E, 1, n) +
+            maha(ii, -ii, iRs / 2))
 
-        S = np.einsum('ji,iljk,kl->il', beta, L, beta)  # [E, E]
-        tr = np.hstack([np.sum(L[i, i] * iK[i]) for i in range(E)])
+        S = np.einsum('ji,iljk,kl->il', beta, Q, beta)  # [E, E]
+        tr = np.hstack([np.sum(Q[i, i] * iK[i]) for i in range(E)])
         S = (S - np.diag(tr)) * t + np.diag(exp(2 * X[:, D])) - M.T @ M
 
         return M, S, V

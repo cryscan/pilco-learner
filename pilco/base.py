@@ -53,3 +53,20 @@ def rollout(start, policy, H, plant, cost):
     latent[H, :nX] = state
 
     return x, y, L, latent
+
+
+def train_dynmodel(gpmodel, plant, policy, x, y):
+    Du = len(policy.max_u)
+    dyni = np.asarray(plant.dyni)
+    dyno = np.asarray(plant.dyno)
+    difi = np.asarray(plant.difi)
+
+    gpmodel.inputs = np.hstack([x[:, dyni], x[:, -Du:]])
+    gpmodel.targets = y[:, dyno]
+    gpmodel.targets[:, difi] = gpmodel.targets[:, difi] - x[:, dyno[difi]]
+    gpmodel.train()
+
+    hyp = gpmodel.hyp
+    print(gpmodel.result)
+    print("Learned noise std:\n%s" % (str(np.exp(hyp[:, -1]))))
+    print("SNRs:\n%s" % (str(np.exp(hyp[:, -2] - hyp[:, -1]))))

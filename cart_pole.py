@@ -6,8 +6,9 @@ from autograd.numpy import sin, cos, log
 from autograd.numpy.random import randn, multivariate_normal
 from matplotlib import animation
 
-from pilco.base import rollout
+from pilco.base import rollout, train_dynmodel
 from pilco.util import gaussian_trig
+from pilco.gp import gpmodel
 from pilco import empty
 
 
@@ -74,7 +75,11 @@ policy.p = p
 
 cost = empty()
 
+dynmodel = gpmodel()
+
 x, y, _, latent = rollout(multivariate_normal(mu0, S0), policy, H, plant, cost)
+
+train_dynmodel(dynmodel, plant, policy, x, y)
 
 L = 0.6
 x0 = latent[:, 0]
