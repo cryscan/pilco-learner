@@ -42,7 +42,7 @@ def gaussian_trig(m, v, i):
     T = np.zeros([d, L])
     for j, k in enumerate(i):
         T[k, j] = 1
-    C = np.dot(T, C)
+    C = T @ C
 
     return M, V, C
 
@@ -67,6 +67,6 @@ def gaussian_sin(m, v, i):
     T = np.zeros([d, L])
     for j, k in enumerate(i):
         T[k, j] = 1
-    C = np.dot(T, C)
+    C = T @ C
 
     return M, V, C
