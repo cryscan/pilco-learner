@@ -82,18 +82,6 @@ class kernel_noise(kernel):
 
 
 class gpmodel:
-    """
-    Before training:
-    hyp      [E, D + 2]
-    inputs   [n, D]
-    targets  [n, E]
-
-    After training:
-    beta     [n, E]
-    K        [n, n]
-    iK       [n, n]
-    """
-
     def __init__(self, kernel=None):
         if kernel is not None:
             self.kernel = kernel
@@ -191,65 +179,100 @@ class gpmodel:
     def gp0(self, m, s):
         """
         Compute joint predictions for MGP with uncertain inputs.
-
-        Input arguments:
-        m  [1, D]
-        s  [D, D]
-
-        Output arguments:
-        M  [1, E]
-        S  [E, E]
-        V  [E, D]
         """
         assert hasattr(self, "hyp")
-        assert hasattr(self, "K")
+        assert hasattr(self, "iK")
 
         x = np.atleast_2d(self.inputs)
         y = np.atleast_2d(self.targets)
         n, D = x.shape
         n, E = y.shape
 
-        X = self.hyp  # [E, D + 2]
-        iK = self.iK  # [n, n]
+        X = self.hyp
+        iK = self.iK
         beta = self.alpha
 
         m = m.reshape(1, D)
-        inp = x - m  # [n, D]
+        inp = x - m
 
         # Compute the predicted mean and IO covariance.
-        iL = np.stack([np.diag(exp(-X[i, :D])) for i in range(E)])  # [E, D, D]
-        iN = inp @ iL  # [E, n, D]
-        B = iL @ s @ iL + np.eye(D)  # [E, D, D]
-        # t = iN @ inv(B)
-        t = np.stack([solve(B[i].T, iN[i].T).T for i in range(E)])  # [E, n, D]
-        q = exp(-np.sum(iN * t, 2) / 2)  # [E, n]
-        qb = q * beta.T  # [E, n]
-        tiL = t @ iL  # [E, n, D]
-        c = exp(2 * X[:, D]) / sqrt(det(B))  # [E]
+        iL = np.stack([np.diag(exp(-X[i, :D])) for i in range(E)])
+        iN = np.matmul(inp, iL)
+        B = iL @ s @ iL + np.eye(D)
+        t = np.stack([solve(B[i].T, iN[i].T).T for i in range(E)])
+        q = exp(-np.sum(iN * t, 2) / 2)
+        qb = q * beta.T
+        tiL = np.matmul(t, iL)
+        c = exp(2 * X[:, D]) / sqrt(det(B))
 
         M = (np.sum(qb, 1) * c).reshape(1, E)
         V = (np.transpose(tiL, [0, 2, 1]) @ np.expand_dims(qb, 2)).reshape(
             E, D) * c.reshape(E, 1)
-        k = 2 * X[:, D].reshape(E, 1) - np.sum(iN**2, 2) / 2  # [E, n]
+        k = 2 * X[:, D].reshape(E, 1) - np.sum(iN**2, 2) / 2
 
         # Compute the predicted covariance.
-        # [E, n, D]
         ii = np.expand_dims(inp, 0) / np.expand_dims(exp(2 * X[:, :D]), 1)
-        # [E, D, D]
         iL = np.stack([np.diag(exp(-2 * X[i, :D])) for i in range(E)])
-        siL = np.expand_dims(iL, 0) + np.expand_dims(iL, 1)  # [E, E, D, D]
-        R = s @ siL + np.eye(D)  # [E, E, D, D]
-        t = 1 / sqrt(det(R))  # [E, E]
+        siL = np.expand_dims(iL, 0) + np.expand_dims(iL, 1)
+        R = np.matmul(s, siL) + np.eye(D)
+        t = 1 / sqrt(det(R))
         iRs = np.stack(
             [solve(R.reshape(-1, D, D)[i], s) for i in range(E * E)])
         iRs = iRs.reshape(E, E, D, D)
-        # [E, E, n, n]
         Q = exp(
             k.reshape(E, 1, n, 1) + k.reshape(1, E, 1, n) +
             maha(ii, -ii, iRs / 2))
 
-        S = np.einsum('ji,iljk,kl->il', beta, Q, beta)  # [E, E]
+        S = np.einsum('ji,iljk,kl->il', beta, Q, beta)
         tr = np.hstack([np.sum(Q[i, i] * iK[i]) for i in range(E)])
-        S = (S - np.diag(tr)) * t + np.diag(exp(2 * X[:, D])) - M.T @ M
+        S = (S - np.diag(tr)) * t + np.diag(exp(2 * X[:, D]))
+        S = S - np.matmul(M.T, M)
+
+        return M, S, V
+
+    def gp2(self, m, s):
+        assert hasattr(self, "hyp")
+
+        x = np.atleast_2d(self.inputs)
+        y = np.atleast_2d(self.targets)
+        n, D = x.shape
+        n, E = y.shape
+
+        X = self.hyp
+        beta = self.alpha
+
+        m = m.reshape(1, D)
+        inp = x - m
+
+        # Compute the predicted mean and IO covariance.
+        iL = np.stack([np.diag(exp(-X[i, :D])) for i in range(E)])
+        iN = np.matmul(inp, iL)
+        B = iL @ s @ iL + np.eye(D)
+        t = np.stack([solve(B[i].T, iN[i].T).T for i in range(E)])
+        q = exp(-np.sum(iN * t, 2) / 2)
+        qb = q * beta.T
+        tiL = np.matmul(t, iL)
+        c = exp(2 * X[:, D]) / sqrt(det(B))
+
+        M = (np.sum(qb, 1) * c).reshape(1, E)
+        V = (np.transpose(tiL, [0, 2, 1]) @ np.expand_dims(qb, 2)).reshape(
+            E, D) * c.reshape(E, 1)
+        k = 2 * X[:, D].reshape(E, 1) - np.sum(iN**2, 2) / 2
+
+        # Compute the predicted covariance.
+        ii = np.expand_dims(inp, 0) / np.expand_dims(exp(2 * X[:, :D]), 1)
+        iL = np.stack([np.diag(exp(-2 * X[i, :D])) for i in range(E)])
+        siL = np.expand_dims(iL, 0) + np.expand_dims(iL, 1)
+        R = np.matmul(s, siL) + np.eye(D)
+        t = 1 / sqrt(det(R))
+        iRs = np.stack(
+            [solve(R.reshape(-1, D, D)[i], s) for i in range(E * E)])
+        iRs = iRs.reshape(E, E, D, D)
+        Q = exp(
+            k.reshape(E, 1, n, 1) + k.reshape(1, E, 1, n) +
+            maha(ii, -ii, iRs / 2))
+
+        S = t * np.einsum('ji,iljk,kl->il', beta, Q, beta) + 1e-6 * np.eye(E)
+        S = S - np.matmul(M.T, M)
 
         return M, S, V

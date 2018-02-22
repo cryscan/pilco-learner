@@ -40,8 +40,8 @@ dyni = [0, 1, 2, 4, 5]
 poli = [0, 1, 2, 4, 5]
 difi = [0, 1, 2, 3]
 
-dt = 0.05
-T = 5
+dt = 0.1
+T = 4
 H = math.ceil(T / dt)
 mu0 = np.array([0, 0, 0, 0])
 S0 = np.square(np.diag([0.1, 0.1, 0.1, 0.1]))
@@ -105,5 +105,5 @@ def animate(i):
 
 
 ani = animation.FuncAnimation(
-    fig, animate, np.arange(len(latent)), interval=30, blit=True)
+    fig, animate, np.arange(len(latent)), interval=100, blit=True)
 plt.show()
