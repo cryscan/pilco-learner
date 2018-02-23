@@ -70,3 +70,7 @@ def train_dynmodel(gpmodel, plant, policy, x, y):
     print(gpmodel.result)
     print("Learned noise std:\n%s" % (str(np.exp(hyp[:, -1]))))
     print("SNRs:\n%s" % (str(np.exp(hyp[:, -2] - hyp[:, -1]))))
+
+
+def propagate(gpmodel, plant, policy, m, s):
+    pass

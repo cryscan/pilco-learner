@@ -1,6 +1,6 @@
 import autograd.numpy as np
 from autograd import value_and_grad
-from autograd.numpy import exp, log, sqrt, std
+from autograd.numpy import exp, log, sqrt, std, newaxis
 from autograd.numpy.linalg import solve, cholesky, det
 from scipy.optimize import minimize
 
@@ -8,8 +8,8 @@ from pilco import empty
 
 
 def maha(a, b, Q):
-    aQ = np.einsum('i...kl,ijlm->ijkm', a, Q)
-    bQ = np.einsum('...ikl,ijlm->ijkm', b, Q)
+    aQ = np.matmul(a[:, newaxis, :, :], Q)
+    bQ = np.matmul(b[newaxis, :, :, :], Q)
     K = np.expand_dims(np.sum(aQ * a, -1), -1) + np.expand_dims(
         np.sum(bQ * b, -1), -2) - 2 * aQ @ np.einsum('...ji', b)
     return K
@@ -117,13 +117,13 @@ class gpmodel:
 
         if np.size(hyp, 1) == 3 * D + 2:
             ll = hyp[:, :2 * D]
-            lsf = hyp[:, 2 * D:3 * D + 1]
+            lsf = hyp[:, 2 * D:-1]
         elif np.size(hyp, 1) == 2 * D + 1:
             ll = hyp[:, :D]
-            lsf = hyp[:, D:2 * D]
+            lsf = hyp[:, D:-1]
         elif np.size(hyp, 1) == D + 2:
             ll = hyp[:, :D]
-            lsf = hyp[:, D + 1]
+            lsf = hyp[:, D]
         else:
             raise ValueError('Incorrect number of hyperparameters.')
         lsn = hyp[:, -1]
@@ -219,9 +219,8 @@ class gpmodel:
         iRs = np.stack(
             [solve(R.reshape(-1, D, D)[i], s) for i in range(E * E)])
         iRs = iRs.reshape(E, E, D, D)
-        Q = exp(
-            k.reshape(E, 1, n, 1) + k.reshape(1, E, 1, n) +
-            maha(ii, -ii, iRs / 2))
+        Q = exp(k[:, newaxis, :, newaxis] + k[newaxis, :, newaxis, :] +
+                maha(ii, -ii, iRs / 2))
 
         S = np.einsum('ji,iljk,kl->il', beta, Q, beta)
         tr = np.hstack([np.sum(Q[i, i] * iK[i]) for i in range(E)])
@@ -268,9 +267,8 @@ class gpmodel:
         iRs = np.stack(
             [solve(R.reshape(-1, D, D)[i], s) for i in range(E * E)])
         iRs = iRs.reshape(E, E, D, D)
-        Q = exp(
-            k.reshape(E, 1, n, 1) + k.reshape(1, E, 1, n) +
-            maha(ii, -ii, iRs / 2))
+        Q = exp(k[:, newaxis, :, newaxis] + k[newaxis, :, newaxis, :] +
+                maha(ii, -ii, iRs / 2))
 
         S = t * np.einsum('ji,iljk,kl->il', beta, Q, beta) + 1e-6 * np.eye(E)
         S = S - np.matmul(M.T, M)
