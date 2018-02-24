@@ -8,10 +8,10 @@ from pilco import empty
 
 
 def maha(a, b, Q):
-    aQ = np.matmul(a[:, newaxis, :, :], Q)
-    bQ = np.matmul(b[newaxis, :, :, :], Q)
+    aQ = np.matmul(a, Q)
+    bQ = np.matmul(b, Q)
     K = np.expand_dims(np.sum(aQ * a, -1), -1) + np.expand_dims(
-        np.sum(bQ * b, -1), -2) - 2 * aQ @ np.einsum('...ji', b)
+        np.sum(bQ * b, -1), -2) - 2 * np.einsum('...ij, ...kj->...ik', aQ, b)
     return K
 
 
@@ -88,7 +88,7 @@ class gpmodel:
         else:
             self.kernel = kernel_rbf() + kernel_noise()
 
-    def _log_pdf(self, hyp):
+    def log_pdf(self, hyp):
         x = np.atleast_2d(self.inputs)
         y = np.atleast_2d(self.targets)
 
@@ -106,7 +106,7 @@ class gpmodel:
 
         return logp
 
-    def _hyp_crub(self, hyp):
+    def hyp_crub(self, hyp):
         x = np.atleast_2d(self.inputs)
         y = np.atleast_2d(self.targets)
 
@@ -128,7 +128,7 @@ class gpmodel:
             raise ValueError('Incorrect number of hyperparameters.')
         lsn = hyp[:, -1]
 
-        L = self._log_pdf(hyp)
+        L = self.log_pdf(hyp)
         L = L + np.sum(((ll - log(self.curb.std)) / log(self.curb.ls))**p)
         L = L + np.sum(((lsf - lsn) / log(self.curb.snr))**p)
         return L
@@ -160,16 +160,10 @@ class gpmodel:
         print("Train hyperparameters of full GP...")
         try:
             self.result = minimize(
-                value_and_grad(self._hyp_crub),
-                self.hyp,
-                jac=True,
-                method='BFGS')
+                value_and_grad(self.hyp_crub), self.hyp, jac=True)
         except Exception:
             self.result = minimize(
-                value_and_grad(self._hyp_crub),
-                self.hyp,
-                jac=True,
-                method='CG')
+                value_and_grad(self.hyp_crub), self.hyp, jac=True, method='CG')
 
         self.hyp = self.result.get('x').reshape(E, -1)
         self.K = self.kernel(self.hyp, x)
@@ -192,7 +186,7 @@ class gpmodel:
         iK = self.iK
         beta = self.alpha
 
-        m = m.reshape(1, D)
+        m = np.atleast_2d(m)
         inp = x - m
 
         # Compute the predicted mean and IO covariance.
@@ -205,13 +199,16 @@ class gpmodel:
         tiL = np.matmul(t, iL)
         c = exp(2 * X[:, D]) / sqrt(det(B))
 
-        M = (np.sum(qb, 1) * c).reshape(1, E)
+        M = np.sum(qb, 1) * c
         V = (np.transpose(tiL, [0, 2, 1]) @ np.expand_dims(qb, 2)).reshape(
             E, D) * c.reshape(E, 1)
         k = 2 * X[:, D].reshape(E, 1) - np.sum(iN**2, 2) / 2
 
         # Compute the predicted covariance.
-        ii = np.expand_dims(inp, 0) / np.expand_dims(exp(2 * X[:, :D]), 1)
+        inp = np.expand_dims(inp, 0) / np.expand_dims(exp(2 * X[:, :D]), 1)
+        ii = np.broadcast_to(inp[:, newaxis, :, :], (E, E, n, D))
+        ij = np.broadcast_to(inp[newaxis, :, :, :], (E, E, n, D))
+
         iL = np.stack([np.diag(exp(-2 * X[i, :D])) for i in range(E)])
         siL = np.expand_dims(iL, 0) + np.expand_dims(iL, 1)
         R = np.matmul(s, siL) + np.eye(D)
@@ -220,12 +217,12 @@ class gpmodel:
             [solve(R.reshape(-1, D, D)[i], s) for i in range(E * E)])
         iRs = iRs.reshape(E, E, D, D)
         Q = exp(k[:, newaxis, :, newaxis] + k[newaxis, :, newaxis, :] +
-                maha(ii, -ii, iRs / 2))
+                maha(ii, -ij, iRs / 2))
 
         S = np.einsum('ji,iljk,kl->il', beta, Q, beta)
         tr = np.hstack([np.sum(Q[i, i] * iK[i]) for i in range(E)])
         S = (S - np.diag(tr)) * t + np.diag(exp(2 * X[:, D]))
-        S = S - np.matmul(M.T, M)
+        S = S - np.matmul(M[:, newaxis], M[newaxis, :])
 
         return M, S, V
 
@@ -240,7 +237,7 @@ class gpmodel:
         X = self.hyp
         beta = self.alpha
 
-        m = m.reshape(1, D)
+        m = np.atleast_2d(m)
         inp = x - m
 
         # Compute the predicted mean and IO covariance.
@@ -253,13 +250,16 @@ class gpmodel:
         tiL = np.matmul(t, iL)
         c = exp(2 * X[:, D]) / sqrt(det(B))
 
-        M = (np.sum(qb, 1) * c).reshape(1, E)
+        M = np.sum(qb, 1) * c
         V = (np.transpose(tiL, [0, 2, 1]) @ np.expand_dims(qb, 2)).reshape(
             E, D) * c.reshape(E, 1)
         k = 2 * X[:, D].reshape(E, 1) - np.sum(iN**2, 2) / 2
 
         # Compute the predicted covariance.
-        ii = np.expand_dims(inp, 0) / np.expand_dims(exp(2 * X[:, :D]), 1)
+        inp = np.expand_dims(inp, 0) / np.expand_dims(exp(2 * X[:, :D]), 1)
+        ii = np.broadcast_to(inp[:, newaxis, :, :], (E, E, n, D))
+        ij = np.broadcast_to(inp[newaxis, :, :, :], (E, E, n, D))
+
         iL = np.stack([np.diag(exp(-2 * X[i, :D])) for i in range(E)])
         siL = np.expand_dims(iL, 0) + np.expand_dims(iL, 1)
         R = np.matmul(s, siL) + np.eye(D)
@@ -268,9 +268,9 @@ class gpmodel:
             [solve(R.reshape(-1, D, D)[i], s) for i in range(E * E)])
         iRs = iRs.reshape(E, E, D, D)
         Q = exp(k[:, newaxis, :, newaxis] + k[newaxis, :, newaxis, :] +
-                maha(ii, -ii, iRs / 2))
+                maha(ii, -ij, iRs / 2))
 
         S = t * np.einsum('ji,iljk,kl->il', beta, Q, beta) + 1e-6 * np.eye(E)
-        S = S - np.matmul(M.T, M)
+        S = S - np.matmul(M[:, newaxis], M[newaxis, :])
 
         return M, S, V
