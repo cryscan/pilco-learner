@@ -5,14 +5,7 @@ from autograd.numpy.linalg import solve, cholesky, det
 from scipy.optimize import minimize
 
 from pilco import empty
-
-
-def maha(a, b, Q):
-    aQ = np.matmul(a, Q)
-    bQ = np.matmul(b, Q)
-    K = np.expand_dims(np.sum(aQ * a, -1), -1) + np.expand_dims(
-        np.sum(bQ * b, -1), -2) - 2 * np.einsum('...ij, ...kj->...ik', aQ, b)
-    return K
+from pilco.util import maha
 
 
 class kernel:
