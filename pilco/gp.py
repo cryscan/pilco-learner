@@ -212,8 +212,8 @@ class gpmodel:
 
         # Compute the predicted covariance.
         inp = np.expand_dims(inp, 0) / np.expand_dims(exp(2 * X[:, :D]), 1)
-        ii = np.broadcast_to(inp[:, newaxis, :, :], (E, E, n, D))
-        ij = np.broadcast_to(inp[newaxis, :, :, :], (E, E, n, D))
+        ii = np.repeat(inp[:, newaxis, :, :], E, 1)
+        ij = np.repeat(inp[newaxis, :, :, :], E, 0)
 
         iL = np.stack([np.diag(exp(-2 * X[i, :D])) for i in range(E)])
         siL = np.expand_dims(iL, 0) + np.expand_dims(iL, 1)
@@ -265,8 +265,8 @@ class gpmodel:
 
         # Compute the predicted covariance.
         inp = np.expand_dims(inp, 0) / np.expand_dims(exp(2 * X[:, :D]), 1)
-        ii = np.broadcast_to(inp[:, newaxis, :, :], (E, E, n, D))
-        ij = np.broadcast_to(inp[newaxis, :, :, :], (E, E, n, D))
+        ii = np.repeat(inp[:, newaxis, :, :], E, 1)
+        ij = np.repeat(inp[newaxis, :, :, :], E, 0)
 
         iL = np.stack([np.diag(exp(-2 * X[i, :D])) for i in range(E)])
         siL = np.expand_dims(iL, 0) + np.expand_dims(iL, 1)
