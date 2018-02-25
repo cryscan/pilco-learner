@@ -8,13 +8,13 @@ class empty(dict):
     pass
 
 
-def fill_to(m, shape, i=None, j=None):
+def fill_mat(m, n, i=None, j=None):
     """
     Fill a matrix m of size [a, b] into a larger one [p, q],
     according to given indices i, j.
     """
     a, b = m.shape
-    p, q = shape
+    p, q = n.shape
     i = np.arange(a) if i is None else np.array(i)
     j = np.arange(b) if j is None else np.array(j)
 
@@ -31,28 +31,29 @@ def fill_to(m, shape, i=None, j=None):
         Ti[v, u] = 1
     for u, v in enumerate(j):
         Tj[u, v] = 1
-    return Ti @ m @ Tj
+    return Ti @ m @ Tj + n
 
 
-def gaussian_trig(m, v, i):
+def gaussian_trig(m, v, i, e=None):
     d = len(m)
     L = len(i)
-    mi = m[i]
-    vi = v[np.ix_(i, i)]
-    vii = np.diag(vi)
+    e = np.ones((1, L)) if e is None else np.atleast_2d(e)
+    ee = np.vstack([e, e]).reshape(1, -1, order='F')
 
-    M = np.vstack([exp(-vii / 2) * sin(mi), exp(-vii / 2) * cos(mi)])
+    mi = np.atleast_2d(m[i])
+    vi = v[np.ix_(i, i)]
+    vii = np.atleast_2d(np.diag(vi))
+
+    M = np.vstack([e * exp(-vii / 2) * sin(mi), e * exp(-vii / 2) * cos(mi)])
     M = M.flatten(order='F')
 
-    mi = mi.reshape(L, 1)
-    vii = vii.reshape(L, 1)
-    lq = -(vii + vii.T) / 2
+    lq = -(vii.T + vii) / 2
     q = exp(lq)
 
-    U1 = (exp(lq + vi) - q) * sin(mi - mi.T)
-    U2 = (exp(lq - vi) - q) * sin(mi + mi.T)
-    U3 = (exp(lq + vi) - q) * cos(mi - mi.T)
-    U4 = (exp(lq - vi) - q) * cos(mi + mi.T)
+    U1 = (exp(lq + vi) - q) * sin(mi.T - mi)
+    U2 = (exp(lq - vi) - q) * sin(mi.T + mi)
+    U3 = (exp(lq + vi) - q) * cos(mi.T - mi)
+    U4 = (exp(lq - vi) - q) * cos(mi.T + mi)
 
     V = np.vstack(
         [np.hstack([U3 - U4, U1 + U2]),
@@ -61,33 +62,34 @@ def gaussian_trig(m, v, i):
         np.hstack([V[::2, ::2], V[::2, 1::2]]),
         np.hstack([V[1::2, ::2], V[1::2, 1::2]])
     ])
-    V = V / 2
+    V = np.dot(ee.T, ee) * V / 2
 
     C = np.hstack([np.diag(M[1::2]), -np.diag(M[::2])])
     C = np.hstack([C[:, ::2], C[:, 1::2]])
-    C = fill_to(C, (d, 2 * L), i, None)
+    C = fill_mat(C, np.zeros((d, 2 * L)), i, None)
 
     return M, V, C
 
 
-def gaussian_sin(m, v, i):
+def gaussian_sin(m, v, i, e=None):
     d = len(m)
     L = len(i)
-    mi = m[i]
+    e = np.ones((1, L)) if e is None else np.atleast_2d(e)
+
+    mi = np.atleast_2d(m[i])
     vi = v[np.ix_(i, i)]
-    vii = np.diag(vi)
-    M = exp(-vii / 2) * sin(mi)
+    vii = np.atleast_2d(np.diag(vi))
+    M = e * exp(-vii / 2) * sin(mi)
+    M = M.flatten()
 
-    mi = mi.reshape(L, 1)
-    vii = vii.reshape(L, 1)
-    lq = -(vii + vii.T) / 2
+    lq = -(vii.T + vii) / 2
     q = exp(lq)
-    V = ((exp(lq + vi) - q) * cos(mi - mi.T) -
-         (exp(lq - vi) - q) * cos(mi + mi.T))
-    V = V / 2
+    V = ((exp(lq + vi) - q) * cos(mi.T - mi) -
+         (exp(lq - vi) - q) * cos(mi.T + mi))
+    V = np.dot(e.T, e) * V / 2
 
-    C = np.diag((exp(-vii / 2) * cos(mi)).flatten())
-    C = fill_to(C, (d, L), i, None)
+    C = np.diag((e * exp(-vii / 2) * cos(mi)).flatten())
+    C = fill_mat(C, np.zeros((d, L)), i, None)
 
     return M, V, C
 

@@ -126,7 +126,21 @@ class gpmodel:
         L = L + np.sum(((lsf - lsn) / log(self.curb.snr))**p)
         return L
 
-    def train(self, curb=None):
+    def cache(self):
+        assert hasattr(self, "inputs")
+        assert hasattr(self, "targets")
+        x = np.atleast_2d(self.inputs)
+        y = np.atleast_2d(self.targets)
+        assert len(x) == len(y)
+
+        n, D = x.shape
+        n, E = y.shape
+
+        self.K = self.kernel(self.hyp, x)
+        self.iK = np.stack([solve(self.K[i], np.eye(n)) for i in range(E)])
+        self.alpha = np.vstack([solve(self.K[i], y[:, i]) for i in range(E)]).T
+
+    def optimize(self, curb=None):
         assert hasattr(self, "inputs")
         assert hasattr(self, "targets")
         x = np.atleast_2d(self.inputs)
@@ -159,16 +173,15 @@ class gpmodel:
                 value_and_grad(self.hyp_crub), self.hyp, jac=True, method='CG')
 
         self.hyp = self.result.get('x').reshape(E, -1)
-        self.K = self.kernel(self.hyp, x)
-        self.iK = np.stack([solve(self.K[i], np.eye(n)) for i in range(E)])
-        self.alpha = np.vstack([solve(self.K[i], y[:, i]) for i in range(E)]).T
+        self.cache()
 
     def gp0(self, m, s):
         """
         Compute joint predictions for MGP with uncertain inputs.
         """
         assert hasattr(self, "hyp")
-        assert hasattr(self, "iK")
+        if not hasattr(self, "K"):
+            self.cache()
 
         x = np.atleast_2d(self.inputs)
         y = np.atleast_2d(self.targets)
@@ -194,7 +207,7 @@ class gpmodel:
 
         M = np.sum(qb, 1) * c
         V = (np.transpose(tiL, [0, 2, 1]) @ np.expand_dims(qb, 2)).reshape(
-            E, D) * c.reshape(E, 1)
+            E, D).T * c
         k = 2 * X[:, D].reshape(E, 1) - np.sum(iN**2, 2) / 2
 
         # Compute the predicted covariance.
@@ -221,6 +234,8 @@ class gpmodel:
 
     def gp2(self, m, s):
         assert hasattr(self, "hyp")
+        if not hasattr(self, "K"):
+            self.cache()
 
         x = np.atleast_2d(self.inputs)
         y = np.atleast_2d(self.targets)
@@ -245,7 +260,7 @@ class gpmodel:
 
         M = np.sum(qb, 1) * c
         V = (np.transpose(tiL, [0, 2, 1]) @ np.expand_dims(qb, 2)).reshape(
-            E, D) * c.reshape(E, 1)
+            E, D).T * c
         k = 2 * X[:, D].reshape(E, 1) - np.sum(iN**2, 2) / 2
 
         # Compute the predicted covariance.
