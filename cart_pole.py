@@ -8,9 +8,10 @@ from matplotlib import animation
 
 from pilco import empty
 from pilco.base import rollout, train, propagate
-from pilco.util import gaussian_trig, gaussian_sin
+from pilco.util import gaussian_trig, gaussian_sin, fill_mat
 from pilco.gp import gpmodel
 from pilco.control import congp, concat
+from pilco.loss import loss_sat
 
 
 def dynamics(z, t, u):
@@ -32,6 +33,39 @@ def dynamics(z, t, u):
     dzdt[3] = z2
 
     return dzdt
+
+
+def loss(cost, m, s):
+    D0 = np.size(s, 1)
+    D1 = D0 + 2 * len(cost.angle)
+    M = m
+    S = s
+
+    ell = cost.p
+    Q = np.dot(np.vstack([1, ell]), np.array([[1, ell]]))
+    Q = fill_mat(Q, np.zeros((D1, D1)), [0, D0], [0, D0])
+    Q = fill_mat(ell**2, Q, [D0 + 1], [D0 + 1])
+
+    if D1 > D0:
+        target = gaussian_trig(cost.target, 0 * s, cost.angle)[0]
+        target = np.hstack([cost.target, target])
+        i = np.arange(D0)
+        m, s, c = gaussian_trig(M, S, cost.angle)
+        q = np.dot(S[np.ix_(i, i)], c)
+        M = np.hstack([M, m])
+        S = np.vstack([np.hstack([S, q]), np.hstack([q.T, s])])
+
+    w = cost.width if hasattr(cost, "width") else [1]
+    L = np.array([0])
+    S2 = np.array(0)
+    for i in range(len(w)):
+        cost.z = target
+        cost.W = Q / w[i]**2
+        r, s2, c = loss_sat(cost, M, S)
+        L = L + r
+        S2 = S2 + s2
+
+    return L / len(w)
 
 
 odei = [0, 1, 2, 3]
@@ -77,8 +111,13 @@ p = {
 policy.p = p
 
 cost = empty()
+cost.fcn = loss
+cost.p = 0.5
+cost.width = [0.25]
+cost.angle = plant.angi
+cost.target = np.array([0, 0, 0, np.pi])
 
-x, y, _, latent = rollout(multivariate_normal(mu0, S0), policy, H, plant, cost)
+x, y, L, latent = rollout(multivariate_normal(mu0, S0), policy, H, plant, cost)
 
 policy.fcn = lambda m, s: concat(congp, gaussian_sin, policy, m, s)
 

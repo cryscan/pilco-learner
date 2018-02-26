@@ -13,6 +13,7 @@ def fill_mat(m, n, i=None, j=None):
     Fill a matrix m of size [a, b] into a larger one [p, q],
     according to given indices i, j.
     """
+    m, n = np.atleast_2d(m), np.atleast_2d(n)
     a, b = m.shape
     p, q = n.shape
     i = np.arange(a) if i is None else np.array(i)

@@ -47,7 +47,7 @@ def rollout(start, policy, H, plant, cost):
         x[i + 1, odei] = multivariate_normal(state[odei], plant.noise)
 
         if hasattr(cost, "fcn"):
-            L[i] = cost.fcn(state[dyno], 0 * np.eye(len(dyno)))
+            L[i] = cost.fcn(cost, state[dyno], 0 * np.eye(len(dyno)))
 
     y = x[1:H + 1, :nX]
     x = np.hstack([x[:H, :], u[:H, :]])
@@ -115,9 +115,9 @@ def value(p, mu0, S0, dynmodel, policy, plant, cost, H):
     policy.p = p
     M = mu0
     S = S0
-    L = np.array([])
+    L = np.array([0])
 
     for t in range(H):
         M, S = plant.prop(M, S, plant, dynmodel, policy)
-        L = np.hstack([L, cost.gamma**t * cost.fcn(M, S)])
+        L = L + cost.gamma**t * cost.fcn(cost, M, S)
     return L

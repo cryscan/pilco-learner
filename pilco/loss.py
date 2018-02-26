@@ -3,25 +3,22 @@ from autograd.numpy import exp, sqrt
 from autograd.numpy.linalg import solve, det
 
 
-class loss:
-    def loss_sat(self, m, s):
-        m = m.reshape(-1, 1)
-        D, _ = m.shape
+def loss_sat(cost, m, s):
+    D = len(m)
 
-        W = self.W if hasattr(self, 'W') else np.eye(D)
-        z = self.z if hasattr(self, 'z') else np.zeros([D, 1])
+    W = cost.W if hasattr(cost, 'W') else np.eye(D)
+    z = cost.z if hasattr(cost, 'z') else np.zeros(D)
+    m, z = np.atleast_2d(m), np.atleast_2d(z)
 
-        sW = np.dot(s, W)
-        ispW = solve((np.eye(D) + sW).T, W.T).T
-        L = -exp(-(m - z).T @ ispW @ (m - z) / 2) / sqrt(det(np.eye(D) + sW))
+    sW = np.dot(s, W)
+    ispW = solve((np.eye(D) + sW).T, W.T).T
+    L = -exp(-(m - z) @ ispW @ (m - z).T / 2) / sqrt(det(np.eye(D) + sW))
 
-        i2spW = solve((np.eye(D) + 2 * sW).T, W.T).T
-        r2 = exp(-(m - z).T @ i2spW @ (m - z)) / sqrt(det(np.eye(D) + 2 * sW))
-        S = r2 - L**2
-        if S < 1e-12:
-            S = 0
+    i2spW = solve((np.eye(D) + 2 * sW).T, W.T).T
+    r2 = exp(-(m - z) @ i2spW @ (m - z).T) / sqrt(det(np.eye(D) + 2 * sW))
+    S = r2 - L**2
 
-        t = np.dot(W, z) - ispW @ (np.dot(sW, z) + m)
-        C = L * t
+    t = np.dot(W, z.T) - ispW @ (np.dot(sW, z.T) + m.T)
+    C = L * t
 
-        return L + 1, S, C
+    return L + 1, S, C
