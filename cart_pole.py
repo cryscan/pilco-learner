@@ -50,8 +50,8 @@ N = 15
 nc = 10
 
 plant = empty()
-plant.prop = propagate
 plant.dynamics = dynamics
+plant.prop = propagate
 plant.noise = np.square(np.diag([1e-2, 1e-2, 1e-2, 1e-2]))
 plant.dt = dt
 plant.odei = odei
@@ -68,9 +68,13 @@ s = np.vstack([np.hstack([S0, c]), np.hstack([c.T, s])])
 
 policy = gpmodel()
 policy.max_u = [10]
-policy.inputs = multivariate_normal(m[poli], s[np.ix_(poli, poli)], nc)
-policy.targets = 0.1 * randn(nc, len(policy.max_u))
-policy.hyp = log([1, 1, 1, 0.7, 0.7, 1, 0.01])
+
+p = {
+    'inputs': multivariate_normal(m[poli], s[np.ix_(poli, poli)], nc),
+    'targets': 0.1 * randn(nc, len(policy.max_u)),
+    'hyp': log([1, 1, 1, 0.7, 0.7, 1, 0.01])
+}
+policy.p = p
 
 cost = empty()
 

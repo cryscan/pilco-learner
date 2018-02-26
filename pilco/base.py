@@ -3,7 +3,7 @@ from autograd.numpy import newaxis
 from autograd.numpy.random import rand, multivariate_normal
 from scipy.integrate import odeint
 
-from pilco.util import fill_mat, gaussian_trig
+from pilco.util import gaussian_trig, fill_mat
 
 
 def rollout(start, policy, H, plant, cost):
@@ -73,7 +73,7 @@ def train(gpmodel, plant, policy, x, y):
     print("SNRs:\n%s" % (str(np.exp(hyp[:, -2] - hyp[:, -1]))))
 
 
-def propagate(dynmodel, plant, policy, m, s):
+def propagate(m, s, plant, dynmodel, policy):
     angi = plant.angi
     poli = plant.poli
     dyni = plant.dyni
@@ -82,34 +82,26 @@ def propagate(dynmodel, plant, policy, m, s):
     D0 = len(m)
     D1 = D0 + 2 * len(angi)
     D2 = D1 + len(policy.max_u)
-    D3 = D2 + D0
     M = np.array(m)
-    S = fill_mat(s, np.zeros((D3, D3)))
+    S = s
 
     i, j = np.arange(D0), np.arange(D0, D1)
     m, s, c = gaussian_trig(M[i], S[np.ix_(i, i)], angi)
-    M = np.hstack([M, m])
-    S = fill_mat(s, S, j, j)
     q = np.matmul(S[np.ix_(i, i)], c)
-    S = fill_mat(q, S, i, j)
-    S = fill_mat(q.T, S, j, i)
+    M = np.hstack([M, m])
+    S = np.vstack([np.hstack([S, q]), np.hstack([q.T, s])])
 
-    i, j, k = poli, np.arange(D1), np.arange(D1, D2)
+    i, j = poli, np.arange(D1)
     m, s, c = policy.fcn(M[i], S[np.ix_(i, i)])
-    M = np.hstack([M, m])
-    S = fill_mat(s, S, k, k)
     q = np.matmul(S[np.ix_(j, i)], c)
-    S = fill_mat(q, S, j, k)
-    S = fill_mat(q.T, S, k, j)
+    M = np.hstack([M, m])
+    S = np.vstack([np.hstack([S, q]), np.hstack([q.T, s])])
 
-    i = np.hstack([dyni, np.arange(D1, D2)])
-    j, k = np.arange(D2), np.arange(D2, D3)
+    i, j = np.hstack([dyni, np.arange(D1, D2)]), np.arange(D2)
     m, s, c = dynmodel.fcn(M[i], S[np.ix_(i, i)])
-    M = np.hstack([M, m])
-    S = fill_mat(s, S, k, k)
     q = np.matmul(S[np.ix_(j, i)], c)
-    S = fill_mat(q, S, j, k)
-    S = fill_mat(q.T, S, k, j)
+    M = np.hstack([M, m])
+    S = np.vstack([np.hstack([S, q]), np.hstack([q.T, s])])
 
     P = np.hstack([np.zeros((D0, D2)), np.eye(D0)])
     P = fill_mat(np.eye(len(difi)), P, difi, difi)
@@ -117,3 +109,15 @@ def propagate(dynmodel, plant, policy, m, s):
     S_next = P @ S @ P.T
     S_next = (S_next + S_next.T) / 2
     return M_next, S_next
+
+
+def value(p, mu0, S0, dynmodel, policy, plant, cost, H):
+    policy.p = p
+    M = mu0
+    S = S0
+    L = np.array([])
+
+    for t in range(H):
+        M, S = plant.prop(M, S, plant, dynmodel, policy)
+        L = np.hstack([L, cost.gamma**t * cost.fcn(M, S)])
+    return L

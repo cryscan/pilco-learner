@@ -5,13 +5,12 @@ from pilco.util import fill_mat
 
 
 def congp(policy, m, s):
-    policy.hyp = np.atleast_2d(policy.hyp)
-    policy.inputs = np.atleast_2d(policy.inputs)
-    policy.targets = np.atleast_2d(policy.targets)
+    policy.hyp = np.atleast_2d(policy.p['hyp'])
+    policy.inputs = np.atleast_2d(policy.p['inputs'])
+    policy.targets = np.atleast_2d(policy.p['targets'])
 
-    E, D = policy.hyp.shape
     T = np.zeros_like(policy.hyp)
-    T[:, (-2, -1)] = np.broadcast_to([log(1), log(0.01)], (E, 2))
+    T[:, (-2, -1)] = np.repeat([[log(1), log(.01)]], np.size(policy.hyp, 0), 0)
     policy.hyp = (T == 0) * policy.hyp + T
 
     return policy.gp2(m, s)
