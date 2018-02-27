@@ -2,11 +2,13 @@ import autograd.numpy as np
 from autograd.numpy import newaxis
 from autograd.numpy.random import rand, multivariate_normal
 from scipy.integrate import odeint
+from scipy.optimize import minimize
+from autograd import value_and_grad
 
-from pilco.util import gaussian_trig, fill_mat
+from pilco.util import gaussian_trig, fill_mat, unwrap, rewrap
 
 
-def rollout(start, policy, H, plant, cost):
+def rollout(start, policy, plant, cost, H):
     """
     Generate a state trajectory using an ODE solver.
     """
@@ -35,7 +37,7 @@ def rollout(start, policy, H, plant, cost):
         x[i, -2 * nA:] = s[-2 * nA:]
 
         if hasattr(policy, "fcn"):
-            u[i, :] = policy.fcn(s[poli], 0 * np.eye(len(poli)))
+            u[i, :], _, _ = policy.fcn(s[poli], 0 * np.eye(len(poli)))
         else:
             u[i, :] = policy.max_u * (2 * rand(nU) - 1)
         latent[i, :] = np.hstack([state, u[i, :]])
@@ -112,7 +114,7 @@ def propagate(m, s, plant, dynmodel, policy):
 
 
 def value(p, mu0, S0, dynmodel, policy, plant, cost, H):
-    policy.p = p
+    policy.p = rewrap(p, policy)
     M = mu0
     S = S0
     L = np.array([0])
@@ -121,3 +123,21 @@ def value(p, mu0, S0, dynmodel, policy, plant, cost, H):
         M, S = plant.prop(M, S, plant, dynmodel, policy)
         L = L + cost.gamma**t * cost.fcn(cost, M, S)
     return L
+
+
+def learn(mu0, S0, dynmodel, policy, plant, cost, H):
+    def value_bind(p):
+        return value(p, mu0, S0, dynmodel, policy, plant, cost, H)
+
+    def callback(p):
+        print(np.asscalar(value(p, mu0, S0, dynmodel, policy, plant, cost, H)))
+
+    options = {'maxiter': 150, 'disp': True}
+    result = minimize(
+        value_and_grad(value_bind),
+        unwrap(policy.p),
+        jac=True,
+        options=options,
+        callback=callback)
+
+    policy.p = rewrap(result['x'], policy)

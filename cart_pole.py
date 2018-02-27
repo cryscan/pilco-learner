@@ -7,7 +7,7 @@ from autograd.numpy.random import randn, multivariate_normal
 from matplotlib import animation
 
 from pilco import empty
-from pilco.base import rollout, train, propagate
+from pilco.base import rollout, train, propagate, learn
 from pilco.util import gaussian_trig, gaussian_sin, fill_mat
 from pilco.gp import gpmodel
 from pilco.control import congp, concat
@@ -46,14 +46,13 @@ def loss(cost, m, s):
     Q = fill_mat(Q, np.zeros((D1, D1)), [0, D0], [0, D0])
     Q = fill_mat(ell**2, Q, [D0 + 1], [D0 + 1])
 
-    if D1 > D0:
-        target = gaussian_trig(cost.target, 0 * s, cost.angle)[0]
-        target = np.hstack([cost.target, target])
-        i = np.arange(D0)
-        m, s, c = gaussian_trig(M, S, cost.angle)
-        q = np.dot(S[np.ix_(i, i)], c)
-        M = np.hstack([M, m])
-        S = np.vstack([np.hstack([S, q]), np.hstack([q.T, s])])
+    target = gaussian_trig(cost.target, 0 * s, cost.angle)[0]
+    target = np.hstack([cost.target, target])
+    i = np.arange(D0)
+    m, s, c = gaussian_trig(M, S, cost.angle)
+    q = np.dot(S[np.ix_(i, i)], c)
+    M = np.hstack([M, m])
+    S = np.vstack([np.hstack([S, q]), np.hstack([q.T, s])])
 
     w = cost.width if hasattr(cost, "width") else [1]
     L = np.array([0])
@@ -68,6 +67,33 @@ def loss(cost, m, s):
     return L / len(w)
 
 
+def draw_rollout(latent, info):
+    L = 0.6
+    x0 = latent[:, 0]
+    y0 = np.zeros_like(x0)
+    x1 = x0 + L * sin(latent[:, 3])
+    y1 = -L * cos(latent[:, 3])
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, autoscale_on=False, xlim=(-2, 2), ylim=(-2, 2))
+    ax.set_aspect("equal")
+    ax.grid()
+
+    line, = ax.plot([], [], 'o-', lw=2)
+    time_text = ax.text(0.05, 0.9, '', transform=ax.transAxes)
+
+    def animate(i):
+        linex = [x0[i], x1[i]]
+        liney = [y0[i], y1[i]]
+        line.set_data(linex, liney)
+        time_text.set_text("time = %.1fs" % (i * dt))
+        return line, time_text
+
+    ani = animation.FuncAnimation(
+        fig, animate, np.arange(len(latent)), interval=100, blit=True)
+    ani.save('cart_pole_' + str(info) + '.mp4', fps=20)
+
+
 odei = [0, 1, 2, 3]
 dyno = [0, 1, 2, 3]
 angi = [3]
@@ -80,7 +106,7 @@ T = 4
 H = math.ceil(T / dt)
 mu0 = np.array([0, 0, 0, 0])
 S0 = np.square(np.diag([0.1, 0.1, 0.1, 0.1]))
-N = 15
+N = 5
 nc = 10
 
 plant = empty()
@@ -113,42 +139,25 @@ policy.p = p
 cost = empty()
 cost.fcn = loss
 cost.p = 0.5
+cost.gamma = 1
 cost.width = [0.25]
 cost.angle = plant.angi
 cost.target = np.array([0, 0, 0, np.pi])
 
-x, y, L, latent = rollout(multivariate_normal(mu0, S0), policy, H, plant, cost)
-
+start = multivariate_normal(mu0, S0)
+x, y, L, latent = rollout(start, policy, plant, cost, H)
 policy.fcn = lambda m, s: concat(congp, gaussian_sin, policy, m, s)
+draw_rollout(latent, 0)
 
-dynmodel = gpmodel()
-dynmodel.fcn = dynmodel.gp0
-train(dynmodel, plant, policy, x, y)
+for i in range(N):
+    dynmodel = gpmodel()
+    dynmodel.fcn = dynmodel.gp0
+    train(dynmodel, plant, policy, x, y)
+    learn(mu0, S0, dynmodel, policy, plant, cost, H)
 
-# Draw rollout.
-L = 0.6
-x0 = latent[:, 0]
-y0 = np.zeros_like(x0)
-x1 = x0 + L * sin(latent[:, 3])
-y1 = -L * cos(latent[:, 3])
-
-fig = plt.figure()
-ax = fig.add_subplot(111, autoscale_on=False, xlim=(-2, 2), ylim=(-2, 2))
-ax.set_aspect("equal")
-ax.grid()
-
-line, = ax.plot([], [], 'o-', lw=2)
-time_text = ax.text(0.05, 0.9, '', transform=ax.transAxes)
-
-
-def animate(i):
-    linex = [x0[i], x1[i]]
-    liney = [y0[i], y1[i]]
-    line.set_data(linex, liney)
-    time_text.set_text("time = %.1fs" % (i * dt))
-    return line, time_text
-
-
-ani = animation.FuncAnimation(
-    fig, animate, np.arange(len(latent)), interval=100, blit=True)
-plt.show()
+    start = multivariate_normal(mu0, S0)
+    x_, y_, L, latent = rollout(start, policy, plant, cost, H)
+    x = np.vstack([x, x_])
+    y = np.vstack([y, y_])
+    print("Test loss: %s", np.sum(L))
+    draw_rollout(latent, i + 1)

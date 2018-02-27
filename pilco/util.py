@@ -16,8 +16,8 @@ def fill_mat(m, n, i=None, j=None):
     m, n = np.atleast_2d(m), np.atleast_2d(n)
     a, b = m.shape
     p, q = n.shape
-    i = np.arange(a) if i is None else np.array(i)
-    j = np.arange(b) if j is None else np.array(j)
+    i = np.arange(a) if i is None else np.atleast_1d(i)
+    j = np.arange(b) if j is None else np.atleast_1d(j)
 
     if a > p or b > q:
         raise ValueError("Shape error!")
@@ -101,3 +101,18 @@ def maha(a, b, Q):
     K = np.expand_dims(np.sum(aQ * a, -1), -1) + np.expand_dims(
         np.sum(bQ * b, -1), -2) - 2 * np.einsum('...ij, ...kj->...ik', aQ, b)
     return K
+
+
+def unwrap(p):
+    return np.hstack([i.flatten() for i in p.values()])
+
+
+def rewrap(p, policy):
+    d = {}
+    start = 0
+
+    for i, j in policy.p.items():
+        L = np.size(j)
+        d[i] = np.reshape(p[start:start + L], j.shape)
+        start = start + L
+    return d

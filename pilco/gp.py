@@ -234,8 +234,7 @@ class gpmodel:
 
     def gp2(self, m, s):
         assert hasattr(self, "hyp")
-        if not hasattr(self, "K"):
-            self.cache()
+        self.cache()
 
         x = np.atleast_2d(self.inputs)
         y = np.atleast_2d(self.targets)
