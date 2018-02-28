@@ -1,10 +1,10 @@
 import autograd.numpy as np
 from autograd.numpy import sin, cos, exp
 
-__all__ = ['empty']
+__all__ = ['Empty']
 
 
-class empty(dict):
+class Empty(dict):
     pass
 
 
@@ -104,15 +104,14 @@ def maha(a, b, Q):
 
 
 def unwrap(p):
-    return np.hstack([i.flatten() for i in p.values()])
+    return np.hstack([v.flatten() for v in p.values()])
 
 
-def rewrap(p, policy):
+def rewrap(m, p):
     d = {}
     start = 0
-
-    for i, j in policy.p.items():
-        L = np.size(j)
-        d[i] = np.reshape(p[start:start + L], j.shape)
-        start = start + L
+    for k, v in p.items():
+        length = np.size(v)
+        d[k] = np.reshape(m[start:start + length], v.shape)
+        start = start + length
     return d

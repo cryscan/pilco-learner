@@ -1,9 +1,9 @@
 import autograd.numpy as np
+from autograd import value_and_grad
 from autograd.numpy import newaxis
 from autograd.numpy.random import rand, multivariate_normal
 from scipy.integrate import odeint
 from scipy.optimize import minimize
-from autograd import value_and_grad
 
 from pilco.util import gaussian_trig, fill_mat, unwrap, rewrap
 
@@ -49,7 +49,7 @@ def rollout(start, policy, plant, cost, H):
         x[i + 1, odei] = multivariate_normal(state[odei], plant.noise)
 
         if hasattr(cost, "fcn"):
-            L[i] = cost.fcn(cost, state[dyno], 0 * np.eye(len(dyno)))
+            L[i] = cost.fcn(state[dyno], 0 * np.eye(len(dyno)))
 
     y = x[1:H + 1, :nX]
     x = np.hstack([x[:H, :], u[:H, :]])
@@ -114,30 +114,37 @@ def propagate(m, s, plant, dynmodel, policy):
 
 
 def value(p, mu0, S0, dynmodel, policy, plant, cost, H):
-    policy.p = rewrap(p, policy)
+    policy.p = rewrap(p, policy.p)
+
     M = mu0
     S = S0
     L = np.array([0])
-
     for t in range(H):
         M, S = plant.prop(M, S, plant, dynmodel, policy)
-        L = L + cost.gamma**t * cost.fcn(cost, M, S)
+        L = L + cost.gamma**t * cost.fcn(M, S)
     return L
 
 
 def learn(mu0, S0, dynmodel, policy, plant, cost, H):
-    def value_bind(p):
-        return value(p, mu0, S0, dynmodel, policy, plant, cost, H)
+    global num_iters
+    num_iters = 0
+    args = (mu0, S0, dynmodel, policy, plant, cost, H)
+    options = {'maxiter': 150, 'disp': True}
 
     def callback(p):
-        print(np.asscalar(value(p, mu0, S0, dynmodel, policy, plant, cost, H)))
+        L = np.asscalar(value(p, *args))
+        global num_iters
+        num_iters += 1
+        print("linesearch %d: %s" % (num_iters, str(L)))
 
-    options = {'maxiter': 150, 'disp': True}
+    print("Perform policy searching...")
     result = minimize(
-        value_and_grad(value_bind),
+        value_and_grad(value),
         unwrap(policy.p),
+        args,
         jac=True,
         options=options,
         callback=callback)
 
-    policy.p = rewrap(result['x'], policy)
+    policy.p = rewrap(result.get('x'), policy.p)
+    return result

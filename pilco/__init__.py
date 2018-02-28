@@ -1,3 +1,3 @@
-from pilco.util import empty
+from pilco.util import Empty
 
-__all__ = ['empty']
+__all__ = ['Empty']

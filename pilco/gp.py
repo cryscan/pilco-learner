@@ -4,16 +4,16 @@ from autograd.numpy import exp, log, sqrt, std, newaxis
 from autograd.numpy.linalg import solve, cholesky, det
 from scipy.optimize import minimize
 
-from pilco import empty
+from pilco import Empty
 from pilco.util import maha
 
 
-class kernel:
+class Kernel:
     def __init__(self):
         pass
 
     def __add__(self, other):
-        sum = kernel()
+        sum = Kernel()
         sum.sub = self, other
         sum.num_hyp = lambda x: self.num_hyp(x) + other.num_hyp(x)
         return sum
@@ -25,7 +25,7 @@ class kernel:
         return left(loghyp[:, :L], x, z) + right(loghyp[:, L:], x, z)
 
 
-class kernel_rbf(kernel):
+class Kernel_RBF(Kernel):
     """
     Squared Exponential covariance function.
     """
@@ -52,7 +52,7 @@ class kernel_rbf(kernel):
         return K
 
 
-class kernel_noise(kernel):
+class Kernel_C(Kernel):
     """
     White noise.
     """
@@ -74,12 +74,12 @@ class kernel_noise(kernel):
         return K
 
 
-class gpmodel:
+class GPModel:
     def __init__(self, kernel=None):
         if kernel is not None:
             self.kernel = kernel
         else:
-            self.kernel = kernel_rbf() + kernel_noise()
+            self.kernel = Kernel_RBF() + Kernel_C()
 
     def log_pdf(self, hyp):
         x = np.atleast_2d(self.inputs)
@@ -153,7 +153,7 @@ class gpmodel:
         if curb is not None:
             self.curb = curb
         elif not hasattr(self, "curb"):
-            self.curb = empty()
+            self.curb = Empty()
             self.curb.snr = 500
             self.curb.ls = 100
             self.curb.std = std(x, 0)
